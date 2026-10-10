@@ -13,3 +13,9 @@ __pycache__/
 *.key
 client_secret*.json
 .DS_Store
+
+# Personal ChatGPT registration and credentials
+chatgpt/
+*.enc
+*.registration.json
+encryption-key

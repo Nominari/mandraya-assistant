@@ -74,7 +74,7 @@ def health(): return {'ok':True}
 def status(req:Request):
  try: email=user(req)
  except HTTPException: email=None
- return {'email':email,'google_ready':bool(CLIENT and SECRET),'ai_ready':False,'mcp_ready':bool(MCP_TOKEN)}
+ return {'email':email,'google_ready':bool(CLIENT and SECRET),'ai_ready':bool(email and __import__('chatgpt_auth').connection(email)['plan_enabled']),'mcp_ready':bool(MCP_TOKEN)}
 @app.get('/auth/google')
 def auth():
  if not CLIENT or not SECRET: raise HTTPException(503,'Google-Anmeldung wird noch eingerichtet.')
@@ -216,6 +216,7 @@ def download(sid:str,req:Request):
  return FileResponse(path,filename=s['title'])
 def proposal(p,actor):
  n=node_detail(p['node_id']);pid=secrets.token_hex(12)
+ if p.get('base_version',n['version'])!=n['version']:raise HTTPException(409,'Die Konzeptfassung hat sich geändert. Bitte neu vergleichen.')
  with db() as c:
   c.execute('INSERT INTO proposals(id,node_id,base_version,content,reason,actor,at) VALUES(?,?,?,?,?,?,?)',(pid,n['id'],n['version'],p['content'],p['reason'],actor,now()));log(c,actor,'Vorschlag erstellt',pid,None,p)
  return {'id':pid}
@@ -234,6 +235,10 @@ async def decide(pid:str,req:Request):
    n=row(c.execute('SELECT * FROM nodes WHERE id=?',(r['node_id'],)).fetchone())
    if n['locked']:raise HTTPException(423,'Beschluss zuerst ausdrücklich wieder öffnen.')
    if n['version']!=r['base_version']:raise HTTPException(409,'Vorschlag bezieht sich auf eine ältere Fassung. Bitte neu vergleichen.')
+   source_ref=c.execute('SELECT m.evidence FROM chat_proposals cp JOIN chat_messages m ON m.id=cp.message_id WHERE cp.proposal_id=?',(pid,)).fetchone()
+   if source_ref:
+    for ev in json.loads(source_ref['evidence']):
+     if c.execute('SELECT max(id) FROM source_versions WHERE source_id=?',(ev['source_id'],)).fetchone()[0]!=ev['version_id']:raise HTTPException(409,'Eine verwendete Quelle hat sich geändert. Bitte den Vorschlag neu prüfen.')
    c.execute('INSERT INTO revisions(node_id,version,snapshot,actor,reason,at) VALUES(?,?,?,?,?,?)',(n['id'],n['version'],json.dumps(n),actor,'Vorschlag angenommen: '+r['reason'],now()))
    c.execute("UPDATE nodes SET content=?,version=version+1,stage='In Bearbeitung' WHERE id=?",(r['content'],n['id']));status='Angenommen'
   elif p.get('action')=='reject':status='Abgelehnt'
@@ -263,6 +268,8 @@ async def mcp(req:Request):
  except (KeyError,ValueError,HTTPException) as e:return JSONResponse({'jsonrpc':'2.0','id':mid,'error':{'code':-32602,'message':str(e)}})
 @app.get('/mcp')
 def mcp_get():return Response(status_code=405)
+from chat import install as install_chat
+chat_read_tool=install_chat(app,db,user,graph,node_detail,proposal,now,log)
 app.mount('/static',StaticFiles(directory=Path(__file__).parent/'static'),name='static')
 @app.get('/')
 def index():return FileResponse(Path(__file__).parent/'static/index.html')

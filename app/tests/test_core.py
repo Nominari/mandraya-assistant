@@ -1,5 +1,5 @@
 import os,tempfile,unittest,json
-os.environ['DATA_DIR']=tempfile.mkdtemp()
+os.environ.setdefault('DATA_DIR',tempfile.mkdtemp())
 os.environ['MCP_TOKEN']='test-only'
 import server
 from fastapi import HTTPException
