@@ -78,6 +78,10 @@ Nach Änderungen prüft die KI auch bestehende offene Fragen und ungeschützte A
 
 Menschen wählen einzelne Änderungen aus und bestätigen sie gemeinsam. Ergebnisse sind vorausgefüllt und bearbeitbar; ein zusätzlicher Kommentar ist optional. Die Übernahme ist atomar: geänderte Grundlagen, Zielversionen oder gesperrte Fassungen blockieren die gesamte Auswahl. Nicht ausgewählte Änderungen bleiben zur Prüfung offen. Die KI verändert keine Beschlüsse automatisch.
 
+## Frageklärung
+
+Mit KI klären öffnet einen fokussierten Gesprächsbereich: Die Frage bleibt oben, der jüngste geladene Gesprächsabschnitt (bis zu 60 Nachrichten) bleibt chronologisch sichtbar und die Eingabe steht darunter. Ältere Nachrichten bleiben über den Verlauf erreichbar. Der Projektkontext wird bei Bedarf eingeblendet. Neue Nachrichten werden angehängt; nach einer Antwort wird nur der Gesprächsinhalt aktualisiert, ohne Navigation oder Zurückspringen der Seite. Wer während einer Antwort nach oben scrollt, wird nicht automatisch zurück zum Ende gezogen. Ergebnisse können im Gespräch als bestätigbare Entwürfe vorbereitet werden.
+
 ## Lizenz
 
 MIT, siehe LICENSE. Die Lizenz gilt für den Anwendungscode. Sie räumt keine Rechte an externen Quellen oder der Marke Mandraya ein.
