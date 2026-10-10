@@ -19,6 +19,12 @@ def prepare(c,args,mid,sid,origin,snapshot,evidence,actor,now,log):
  if kind=='statement' and len(content)>6000:raise ValueError('Aussage bitte präziser formulieren')
  if kind=='question' and len(content)>6000:raise ValueError('Frage bitte kürzer formulieren')
  if kind=='variant' and (not title or len(title)>160):raise ValueError('Variantenname erforderlich')
+ if kind=='question':
+  normalize=lambda text:' '.join(text.casefold().split())
+  for q in c.execute("SELECT id,question FROM work_questions WHERE status!='Geklärt'"):
+   if normalize(q['question'])==normalize(content):return {'existing_question_id':q['id'],'status':'Diese offene Frage ist bereits festgehalten; keine Dublette vorbereitet.','saved_as_decision':False}
+  for r in c.execute("SELECT id,content FROM chat_records WHERE kind='question' AND status='Entwurf' AND basis=?",(snapshot,)):
+   if normalize(r['content'])==normalize(content):return {'existing_draft_id':r['id'],'status':'Dieser Fragenentwurf liegt bereits zur Prüfung vor.','saved_as_decision':False}
  rid=secrets.token_hex(12)
  c.execute('INSERT INTO chat_records(id,message_id,session_id,origin_node,node_id,kind,title,content,reason,basis,evidence) VALUES(?,?,?,?,?,?,?,?,?,?,?)',(rid,mid,sid,origin,nid,kind,title,content,reason,snapshot,json.dumps(list(evidence.values()))))
  log(c,actor,'KI-Entwurf vorbereitet',rid,None,{'kind':kind,'node_id':nid,'content':content})

@@ -23,13 +23,14 @@ def db():
 def row(x): return dict(x) if x else None
 def log(c,who,action,entity,before=None,after=None):
  c.execute('INSERT INTO audit(actor,action,entity,before_json,after_json,at) VALUES(?,?,?,?,?,?)',(who,action,entity,json.dumps(before,ensure_ascii=False),json.dumps(after,ensure_ascii=False),now()))
+ if 'impact' in globals():impact.enqueue(c,who,action,entity,after)
 def initialize():
  with db() as c:
   c.executescript('''PRAGMA journal_mode=WAL;
 CREATE TABLE IF NOT EXISTS nodes(id TEXT PRIMARY KEY,parent TEXT REFERENCES nodes(id),title TEXT,scope TEXT,summary TEXT,content TEXT DEFAULT '',stage TEXT DEFAULT 'Ungeprüft',locked INTEGER DEFAULT 0,version INTEGER DEFAULT 1);
 CREATE TABLE IF NOT EXISTS revisions(id INTEGER PRIMARY KEY,node_id TEXT,version INTEGER,snapshot TEXT,actor TEXT,reason TEXT,at TEXT);
 CREATE TABLE IF NOT EXISTS sources(id TEXT PRIMARY KEY,title TEXT,url TEXT,path TEXT,kind TEXT,coverage TEXT);
-CREATE TABLE IF NOT EXISTS source_versions(id INTEGER PRIMARY KEY,source_id TEXT REFERENCES sources(id),hash TEXT,content TEXT,modified TEXT,at TEXT,UNIQUE(source_id,hash));
+CREATE TABLE IF NOT EXISTS source_versions(id INTEGER PRIMARY KEY,source_id TEXT REFERENCES sources(id),hash TEXT,content TEXT,modified TEXT,at TEXT);
 CREATE TABLE IF NOT EXISTS source_nodes(source_id TEXT REFERENCES sources(id),node_id TEXT REFERENCES nodes(id),PRIMARY KEY(source_id,node_id));
 CREATE TABLE IF NOT EXISTS edges(a TEXT REFERENCES nodes(id),b TEXT REFERENCES nodes(id),label TEXT,PRIMARY KEY(a,b));
 CREATE TABLE IF NOT EXISTS proposals(id TEXT PRIMARY KEY,node_id TEXT REFERENCES nodes(id),base_version INTEGER,content TEXT,reason TEXT,actor TEXT,status TEXT DEFAULT 'Offen',at TEXT);
@@ -37,6 +38,15 @@ CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,actor TEXT,action TEXT,e
 CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY,email TEXT,expires INTEGER);
 CREATE TABLE IF NOT EXISTS oauth_states(hash TEXT PRIMARY KEY,expires INTEGER);
 ''')
+  schema=c.execute("SELECT sql FROM sqlite_master WHERE name='source_versions'").fetchone()[0]
+  if 'UNIQUE' in schema.upper():
+   # Preserve every archived revision ID while allowing A -> B -> A changes.
+   c.execute('BEGIN IMMEDIATE')
+   c.execute('CREATE TABLE source_versions_v2(id INTEGER PRIMARY KEY,source_id TEXT REFERENCES sources(id),hash TEXT,content TEXT,modified TEXT,at TEXT)')
+   c.execute('INSERT INTO source_versions_v2 SELECT * FROM source_versions')
+   c.execute('DROP TABLE source_versions')
+   c.execute('ALTER TABLE source_versions_v2 RENAME TO source_versions')
+  c.execute('CREATE INDEX IF NOT EXISTS source_revision_lookup ON source_versions(source_id,id)')
   if c.execute('SELECT count(*) FROM nodes').fetchone()[0]: return
   topics=[('format','Veranstaltungskonzept','Was Mandraya anbietet, für wen und welchen Zusammenhang die Serie hat.',['Zielgruppen & Erlebnisversprechen','Format & Serienstruktur']),('world','Welt & Legende','Der gemeinsame erzählerische Rahmen und die Identität Mandrayas.',['Übergreifende Legende','Prinzipien der Welt']),('play','Teilnahme & Spielkonzept','Das gemeinsame Teilnahmekonzept gilt für Mandraya insgesamt.',['Packs & Gemeinschaft','Mensch-Hund-Zusammenarbeit','Spielablauf & Fortschritt']),('experience','Erlebnisgestaltung','Wie aus Konzept und Geschichte reale Erlebnisse werden.',['Gestaltungsprinzipien','Qualität & Spielbarkeit']),('brand','Marke & Kommunikation','Wie Menschen Mandraya verstehen und kennenlernen.',['Markenidentität','Kommunikationskonzept']),('digital','Website & Infrastruktur','Gemeinsamer öffentlicher Auftritt und digitale Unterstützung.',['Website-Konzept','Teilnahme & Verwaltung']),('operations','Organisation & Durchführung','Gemeinsame Organisation und wiederverwendbare Grundlagen.',['Verantwortlichkeiten','Sicherheit & Tierwohl','Technik & Ausstattung']),('finance','Finanzierung & Partnerschaften','Geschäftsmodell, Finanzierung und übergreifende Partnerbeziehungen.',['Geschäftsmodell','Aufbaukosten','Partnerangebot']),('test','Erprobung & Weiterentwicklung','Welche Annahmen wir testen und wie wir Ergebnisse nutzen.',['Teststrategie','Erfolgskriterien'])]
   c.execute("INSERT INTO nodes(id,title,scope,summary) VALUES('mandraya','Mandraya','Mandraya','Das gesamte Veranstaltungskonzept. Dieses Grundgerüst ist vorläufig.')")
@@ -182,11 +192,15 @@ def ingest(s,actor):
  with db() as c:
   old=row(c.execute('SELECT * FROM sources WHERE id=?',(sid,)).fetchone())
   c.execute('INSERT INTO sources VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,url=excluded.url,path=excluded.path,kind=excluded.kind,coverage=excluded.coverage',(sid,s['title'],s.get('url',''),s.get('path','Eingang'),s.get('kind','Text'),s.get('coverage','Text vollständig')))
-  cursor=c.execute('INSERT OR IGNORE INTO source_versions(source_id,hash,content,modified,at) VALUES(?,?,?,?,?)',(sid,digest,content,s.get('modified',''),now()))
-  for nid in s.get('nodes',[]): c.execute('INSERT OR IGNORE INTO source_nodes VALUES(?,?)',(sid,nid))
-  if cursor.rowcount:log(c,actor,'Quelle erfasst',sid,old,{'title':s['title'],'hash':digest,'coverage':s.get('coverage')})
+  latest=c.execute('SELECT hash FROM source_versions WHERE source_id=? ORDER BY id DESC LIMIT 1',(sid,)).fetchone();new_version=not latest or latest['hash']!=digest
+  if new_version:c.execute('INSERT INTO source_versions(source_id,hash,content,modified,at) VALUES(?,?,?,?,?)',(sid,digest,content,s.get('modified',''),now()))
+  links_changed=False
+  for nid in s.get('nodes',[]):
+   added=c.execute('INSERT OR IGNORE INTO source_nodes VALUES(?,?)',(sid,nid));links_changed=links_changed or bool(added.rowcount)
+  metadata_changed=bool(old and any(old[k]!=s.get(k,default) for k,default in [('title',''),('url',''),('path','Eingang'),('kind','Text'),('coverage','Text vollständig')]))
+  if new_version or metadata_changed or links_changed:log(c,actor,'Quelle erfasst' if new_version else 'Quelle aktualisiert',sid,old,{'title':s['title'],'hash':digest,'coverage':s.get('coverage')})
  with db() as c:source_policy.refresh(c)
- return {'id':sid,'new_version':bool(cursor.rowcount)}
+ return {'id':sid,'new_version':new_version}
 @app.post('/api/input')
 async def input_text(req:Request):
  actor=user(req);p=await req.json()
@@ -283,6 +297,9 @@ install_chat_records(app,db,user,now,log)
 install_workbench(app,db,user,node_detail,now,log)
 from chat import install as install_chat
 chat_read_tool=install_chat(app,db,user,graph,node_detail,proposal,now,log)
+import impact
+with db() as c:impact.setup(c)
+run_impact_once=impact.install(app,db,user,chat_read_tool,now,log)
 app.mount('/static',StaticFiles(directory=Path(__file__).parent/'static'),name='static')
 @app.get('/')
 def index():return FileResponse(Path(__file__).parent/'static/index.html')

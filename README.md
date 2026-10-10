@@ -52,7 +52,7 @@ Mit Python 3.12: `python -m pip install -r app/requirements.txt`, danach `cd app
 
 ## Workflow und Grenzen
 
-Die Oberfläche zeigt gespeicherte Quellen und Aussagen, keine zugesicherte Vollständigkeit. KI-Ergebnisse sind Entwürfe. Neue Fragen aus KI-Analysen entstehen erst nach menschlicher Bestätigung. Die projektweite Fragenübersicht wird im sichtbaren Browser alle 30 Sekunden aktualisiert; es gibt keine permanente Hintergrundanalyse. Der letzte Austausch steht im Arbeitsbereich. Der bisherige Verlauf lädt zunächst die jüngsten 60 gespeicherten Nachrichten je Diskussion; ältere Nachrichten lassen sich schrittweise nachladen. Der KI-Kontext ist begrenzt und berücksichtigt den geprüften Zwischenstand; eine vollständige Analyse aller früheren Dialoge wird nicht zugesichert. Unfertige Eingaben und bearbeitete Übernahmeformulare werden personenbezogen im Browser zwischengespeichert; erst bestätigte Übernahmen werden gemeinsam gespeichert und protokolliert. Bei Datenbankänderungen sichert `backup.py` die bisherige Datenbank. Nach Schemaerweiterungen erfordert ein Rollback auf ältere Software gegebenenfalls Wiederherstellung dieser Sicherung.
+Die Oberfläche zeigt gespeicherte Quellen und Aussagen, keine zugesicherte Vollständigkeit. KI-Ergebnisse sind Entwürfe. Neue Fragen aus KI-Analysen entstehen erst nach menschlicher Bestätigung. Fragen aus Unterthemen erscheinen unter derselben ID auch in übergeordneten Themen. Die projektweite Fragenübersicht wird im sichtbaren Browser alle 30 Sekunden aktualisiert. Neue gespeicherte Quellen, Arbeitsfassungen, Beschlüsse und geprüfte Werkstatt-Zwischenstände lösen automatisch eine anlassbezogene Auswirkungsprüfung aus. Eine dauerhafte Prüfschleife ohne Änderungen findet nicht statt. Der letzte Austausch steht im Arbeitsbereich. Der bisherige Verlauf lädt zunächst die jüngsten 60 gespeicherten Nachrichten je Diskussion; ältere Nachrichten lassen sich schrittweise nachladen. Der KI-Kontext ist begrenzt und berücksichtigt den geprüften Zwischenstand; eine vollständige Analyse aller früheren Dialoge wird nicht zugesichert. Unfertige Eingaben und bearbeitete Übernahmeformulare werden personenbezogen im Browser zwischengespeichert; erst bestätigte Übernahmen werden gemeinsam gespeichert und protokolliert. Bei Datenbankänderungen sichert `backup.py` die bisherige Datenbank. Nach Schemaerweiterungen erfordert ein Rollback auf ältere Software gegebenenfalls Wiederherstellung dieser Sicherung.
 
 ## Aktuelle Dokumente und Quellenstand
 
@@ -62,7 +62,15 @@ Dokumenteditionen im Dateinamen (z.B. V0.14/V0.15) sind getrennt von gespeichert
 
 ## Quellenimport
 
-`app/import_sources.py` verarbeitet eine JSON-Liste mit `id`, `title`, `content` und optional `url`, `path`, `kind`, `coverage`, `modified`, `nodes`. Gleiche Quellen-ID und gleicher Texthash erzeugen keine doppelte Version. Quelldateien und Importdaten gehören nicht ins Repository.
+`app/import_sources.py` verarbeitet eine JSON-Liste mit `id`, `title`, `content` und optional `url`, `path`, `kind`, `coverage`, `modified`, `nodes`. Gleiche Quellen-ID und unveränderter aktueller Texthash erzeugen keine doppelte Version. Eine Rückkehr zu früherem Inhalt (A → B → A) wird als neue aktuelle Revision archiviert; frühere Revisions-IDs bleiben erhalten. Quelldateien und Importdaten gehören nicht ins Repository.
+
+## Automatische Auswirkungsprüfung
+
+Die Anwendung speichert Prüfaufträge in SQLite, bündelt unmittelbar aufeinanderfolgende Änderungen und verarbeitet sie im Hintergrund. Sie verwendet die persönliche ChatGPT-Verbindung der auslösenden Person. Systemimporte können über `IMPACT_IMPORT_OWNER` einem ausdrücklich dafür autorisierten verbundenen Konto zugeordnet werden; alternativ wird `BASELINE_OWNER` verwendet. Ohne passende Verbindung bleibt der Auftrag sichtbar wartend. `IMPACT_MODEL` ist optional; die tatsächlich verfügbaren Modelle werden vom Konto geladen. Betrieb weiterhin mit genau einem Anwendungsprozess.
+
+Die KI kann nur lesende Werkzeuge verwenden. Ein Hinweis auf ein anderes Thema benötigt dessen nachgeladenen aktuellen Themenstand als Beleg. Ergebnisse sind KI-Prüfhinweise mit Herkunft, betroffener Node und verwendeten Fassungen. Die Menschen wählen Besprechen, als offene Frage speichern oder Verwerfen. Eine Diskussion alleine registriert keine Frage; Fragen und Beschlüsse entstehen erst nach ausdrücklicher Bestätigung. Veränderte Grundlagen, Fehler und ausstehende Aufträge werden angezeigt. Eine erneute Prüfung kann einen überholten Hinweis unter derselben ID aktualisieren. Im Gespräch kann die KI konkrete neue Fragen eigenständig als bestätigbare Entwürfe vorbereiten.
+
+Diese Prüfung untersucht konkrete Anlässe und Abhängigkeiten mit begrenzter Recherche. Sie garantiert keine vollständige Widerspruchsfreiheit. Änderungen in Drive zählen erst nach dem Import; diese Funktion fügt keinen Drive-Watcher hinzu. Die Prüfungen verbrauchen Kontonutzung und übermitteln relevante Projekttexte an OpenAI. Vor einem Release mit Datenbankmigration `backup.py` aus der bisherigen Version ausführen.
 
 ## Lizenz
 

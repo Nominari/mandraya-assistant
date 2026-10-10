@@ -16,12 +16,17 @@ CREATE TABLE IF NOT EXISTS work_questions(id TEXT PRIMARY KEY,node_id TEXT REFER
 CREATE TABLE IF NOT EXISTS work_variants(id TEXT PRIMARY KEY,node_id TEXT,session_id TEXT,title TEXT,content TEXT,status TEXT DEFAULT 'Offen',actor TEXT,at TEXT);
 ''')
 
+def branch_ids(c,nid):
+ return [x[0] for x in c.execute('WITH RECURSIVE tree(id) AS (SELECT ? UNION SELECT n.id FROM nodes n JOIN tree t ON n.parent=t.id) SELECT id FROM tree',(nid,))]
+
 def basis(c):
  # A review must not silently use a project snapshot that has since changed.
  data={}
  for name,query in {
   'nodes':'SELECT id,version FROM nodes ORDER BY id',
+  'workshop_summaries':"SELECT id,version FROM explorations WHERE summary!='' ORDER BY id",
   'sources':'SELECT s.id,s.title,s.path,s.coverage,max(v.id) FROM sources s LEFT JOIN source_versions v ON v.source_id=s.id GROUP BY s.id ORDER BY s.id',
+  'source_nodes':'SELECT source_id,node_id FROM source_nodes ORDER BY source_id,node_id',
   'source_policy':'SELECT source_id,status,edition,successor_id FROM source_policy ORDER BY source_id',
   'edges':'SELECT * FROM edges ORDER BY a,b',
   'statements':'SELECT id,version FROM statements ORDER BY id',
@@ -64,7 +69,7 @@ def install(app,db,user,node_detail,now,log):
    f=c.execute('SELECT * FROM source_foundations WHERE node_id=?',(nid,)).fetchone();n['foundation']=dict(f) if f else None
    n['sessions']=[dict(r) for r in c.execute('SELECT * FROM explorations WHERE node_id=? ORDER BY at DESC',(nid,))]
    n['statements']=[dict(r) for r in c.execute('SELECT * FROM statements WHERE node_id=? ORDER BY at',(nid,))]
-   n['questions']=[dict(r) for r in c.execute('SELECT * FROM work_questions WHERE node_id=? ORDER BY at',(nid,))]
+   ids=branch_ids(c,nid);n['questions']=[{**dict(r),'inherited':r['node_id']!=nid} for r in c.execute('SELECT * FROM work_questions WHERE node_id IN ('+','.join('?' for _ in ids)+') ORDER BY at',ids)]
    n['variants']=[dict(r) for r in c.execute('SELECT * FROM work_variants WHERE node_id=? ORDER BY at',(nid,))]
    r=c.execute('SELECT * FROM node_briefs WHERE node_id=?',(nid,)).fetchone()
    n['brief']=dict(r) if r else None
@@ -83,7 +88,9 @@ def install(app,db,user,node_detail,now,log):
  def get_session(sid:str,req:Request):
   user(req)
   with db() as c:
-   r=session(c,sid);q=c.execute('SELECT q.* FROM work_questions q JOIN question_explorations x ON x.question_id=q.id WHERE x.session_id=?',(sid,)).fetchone();r['question']=dict(q) if q else None;r['stale']=bool(r['basis'] and r['basis']!=basis(c))
+   r=session(c,sid);q=c.execute('SELECT q.* FROM work_questions q JOIN question_explorations x ON x.question_id=q.id WHERE x.session_id=?',(sid,)).fetchone();r['question']=dict(q) if q else None;f=c.execute('SELECT * FROM impact_findings WHERE session_id=? ORDER BY at DESC LIMIT 1',(sid,)).fetchone();r['impact']=dict(f) if f else None
+   if r['impact']:r['impact']['stale']=r['impact']['basis']!=basis(c)
+   r['stale']=bool(r['basis'] and r['basis']!=basis(c))
    rev=c.execute('SELECT * FROM work_reviews WHERE session_id=? ORDER BY rowid DESC LIMIT 1',(sid,)).fetchone()
    r['review']=dict(rev) if rev else None
    if r['review']:
