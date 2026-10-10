@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+!.env.example
+*.sqlite*
+*.db
+/data/
+/backups/
+/imports/
+*.pem
+*.key
+client_secret*.json
+.DS_Store

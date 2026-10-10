@@ -1,0 +1,13 @@
+services:
+  assistant:
+    build: ./app
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:4190:8080"
+    volumes:
+      - assistant-data:/data
+    mem_limit: 768m
+    cpus: 1.0
+volumes:
+  assistant-data:
