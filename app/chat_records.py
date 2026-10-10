@@ -6,6 +6,11 @@ from workbench import basis
 def setup(c):
  c.execute('CREATE TABLE IF NOT EXISTS chat_records(id TEXT PRIMARY KEY,message_id TEXT,session_id TEXT,origin_node TEXT,node_id TEXT,kind TEXT,title TEXT,content TEXT,reason TEXT,basis TEXT,evidence TEXT,status TEXT DEFAULT \'Entwurf\')')
 
+ c.execute('CREATE TABLE IF NOT EXISTS chat_grounding(message_id TEXT PRIMARY KEY,basis TEXT,at TEXT,receipt TEXT)')
+ columns={x[1] for x in c.execute('PRAGMA table_info(chat_records)')}
+ for name,typ in [('question_id','TEXT'),('question_version','INTEGER')]:
+  if name not in columns:c.execute('ALTER TABLE chat_records ADD COLUMN '+name+' '+typ)
+
 def prepare(c,args,mid,sid,origin,snapshot,evidence,actor,now,log):
  if not sid:raise ValueError('Entwürfe sind nur in einer Werkstatt möglich.')
  kind=args['kind'];nid=args['node_id'];content=args['content'].strip();reason=args['reason'].strip();title=args['title'].strip()
@@ -18,6 +23,16 @@ def prepare(c,args,mid,sid,origin,snapshot,evidence,actor,now,log):
  c.execute('INSERT INTO chat_records(id,message_id,session_id,origin_node,node_id,kind,title,content,reason,basis,evidence) VALUES(?,?,?,?,?,?,?,?,?,?,?)',(rid,mid,sid,origin,nid,kind,title,content,reason,snapshot,json.dumps(list(evidence.values()))))
  log(c,actor,'KI-Entwurf vorbereitet',rid,None,{'kind':kind,'node_id':nid,'content':content})
  return {'draft_id':rid,'status':'Entwurf wartet auf menschliche Prüfung','saved_as_decision':False}
+
+def prepare_resolution(c,args,mid,sid,origin,snapshot,evidence,actor,now,log):
+ q=c.execute('SELECT q.* FROM work_questions q JOIN question_explorations x ON x.question_id=q.id WHERE x.session_id=? AND q.id=?',(sid,args['question_id'])).fetchone()
+ if not q or q['status']=='Geklärt':raise ValueError('Nur die offene Frage dieser Werkstatt kann hier geklärt werden.')
+ answer=args['answer'].strip();decision=args['decision'].strip();reason=args['reason'].strip()
+ if not answer or len(answer)>12000 or len(decision)>6000 or not reason or len(reason)>6000:raise ValueError('Ungültiges Ergebnis')
+ rid=secrets.token_hex(12)
+ c.execute('INSERT INTO chat_records(id,message_id,session_id,origin_node,node_id,kind,title,content,reason,basis,evidence,question_id,question_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',(rid,mid,sid,origin,q['node_id'],'resolution',decision,answer,reason,snapshot,json.dumps(list(evidence.values())),q['id'],q['version']))
+ log(c,actor,'Klärungsentwurf vorbereitet',rid,None,{'question_id':q['id'],'answer':answer,'decision':decision})
+ return {'draft_id':rid,'saved_as_decision':False,'status':'Ergebnis und optionaler Beschluss warten auf menschliche Bestätigung'}
 
 def install(app,db,user,now,log):
  @app.post('/api/chat-records/{rid}')
@@ -38,7 +53,22 @@ def install(app,db,user,now,log):
    n=c.execute('SELECT * FROM nodes WHERE id=?',(nid,)).fetchone()
    if not n:raise HTTPException(404,'Thema nicht gefunden.')
    entity=secrets.token_hex(12)
-   if r['kind']=='statement':
+   if r['kind']=='resolution':
+    q=c.execute('SELECT * FROM work_questions WHERE id=?',(r['question_id'],)).fetchone()
+    if not q or q['status']=='Geklärt' or q['version']!=r['question_version']:raise HTTPException(409,'Die Frage wurde geändert. Bitte das Ergebnis neu prüfen lassen.')
+    if nid!=q['node_id'] or len(content)>12000:raise HTTPException(400,'Das Ergebnis muss bei der ursprünglichen Frage bleiben (maximal 12.000 Zeichen).')
+    if p.get('decide',False) is not False and p.get('decide') is not True:raise HTTPException(400,'Beschluss ausdrücklich auswählen.')
+    statement_id=None
+    if p.get('decide') is True:
+     if not title or len(title)>6000:raise HTTPException(400,'Bitte eine präzise Beschlussaussage formulieren.')
+     existing=c.execute("SELECT id FROM statements WHERE node_id=? AND content=? AND status='Beschlossen'",(nid,title)).fetchone()
+     statement_id=existing['id'] if existing else secrets.token_hex(12)
+     if not existing:c.execute('INSERT INTO statements(id,node_id,content,status,actor,at) VALUES(?,?,?,?,?,?)',(statement_id,nid,title,'Beschlossen',actor,now()))
+     log(c,actor,'Aussage beschlossen',statement_id,None,{'content':title,'question_id':q['id'],'reason':reason})
+    c.execute("UPDATE work_questions SET answer=?,status='Geklärt',version=version+1 WHERE id=?",(content,q['id']))
+    c.execute('INSERT INTO question_resolutions VALUES(?,?,?,?,?,?,?,?,?)',(entity,q['id'],rid,statement_id,content,r['basis'],r['evidence'],actor,now()))
+    log(c,actor,'Frage Geklärt',q['id'],dict(q),{'answer':content,'statement_id':statement_id,'reason':reason})
+   elif r['kind']=='statement':
     if len(content)>6000:raise HTTPException(400,'Aussage ist zu lang.')
     existing=c.execute("SELECT id FROM statements WHERE node_id=? AND content=? AND status='Beschlossen'",(nid,content)).fetchone()
     if existing:entity=existing['id']

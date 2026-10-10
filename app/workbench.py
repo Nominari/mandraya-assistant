@@ -5,6 +5,8 @@ from fastapi import HTTPException,Request
 def setup(db):
  with db() as c:
   c.executescript('''
+CREATE TABLE IF NOT EXISTS question_explorations(session_id TEXT PRIMARY KEY,question_id TEXT REFERENCES work_questions(id));
+CREATE TABLE IF NOT EXISTS question_resolutions(id TEXT PRIMARY KEY,question_id TEXT,record_id TEXT,statement_id TEXT,answer TEXT,basis TEXT,evidence TEXT,actor TEXT,at TEXT);
 CREATE TABLE IF NOT EXISTS source_foundations(node_id TEXT PRIMARY KEY,content TEXT,evidence TEXT,at TEXT);
 CREATE TABLE IF NOT EXISTS explorations(id TEXT PRIMARY KEY,node_id TEXT REFERENCES nodes(id),title TEXT,summary TEXT DEFAULT '',basis TEXT DEFAULT '',version INTEGER DEFAULT 1,actor TEXT,at TEXT);
 CREATE TABLE IF NOT EXISTS work_reviews(id TEXT PRIMARY KEY,session_id TEXT,node_id TEXT,content TEXT,basis TEXT,evidence TEXT,at TEXT,applied INTEGER DEFAULT 0);
@@ -81,7 +83,7 @@ def install(app,db,user,node_detail,now,log):
  def get_session(sid:str,req:Request):
   user(req)
   with db() as c:
-   r=session(c,sid);r['stale']=bool(r['basis'] and r['basis']!=basis(c))
+   r=session(c,sid);q=c.execute('SELECT q.* FROM work_questions q JOIN question_explorations x ON x.question_id=q.id WHERE x.session_id=?',(sid,)).fetchone();r['question']=dict(q) if q else None;r['stale']=bool(r['basis'] and r['basis']!=basis(c))
    rev=c.execute('SELECT * FROM work_reviews WHERE session_id=? ORDER BY rowid DESC LIMIT 1',(sid,)).fetchone()
    r['review']=dict(rev) if rev else None
    if r['review']:
@@ -113,6 +115,17 @@ def install(app,db,user,node_detail,now,log):
    if existing:return {'id':existing['id'],'existing':True}
    did=secrets.token_hex(12);c.execute('INSERT INTO statements(id,node_id,content,status,actor,at) VALUES(?,?,?,?,?,?)',(did,nid,content,'Beschlossen',actor,now()));log(c,actor,'Aussage beschlossen',did,None,{'content':content,'node_id':nid,'reason':reason})
   return {'id':did}
+ @app.post('/api/work-questions/{qid}/explore')
+ async def explore_question(qid:str,req:Request):
+  actor=user(req)
+  with db() as c:
+   c.execute('BEGIN IMMEDIATE');q=c.execute('SELECT * FROM work_questions WHERE id=?',(qid,)).fetchone()
+   if not q:raise HTTPException(404,'Frage nicht gefunden.')
+   if q['status']=='Geklärt':raise HTTPException(409,'Die Frage ist bereits geklärt. Zum Weiterbearbeiten zuerst wieder öffnen.')
+   old=c.execute('SELECT session_id FROM question_explorations WHERE question_id=? ORDER BY rowid DESC LIMIT 1',(qid,)).fetchone()
+   if old:return {'id':old[0]}
+   sid=secrets.token_hex(12);c.execute('INSERT INTO explorations(id,node_id,title,actor,at) VALUES(?,?,?,?,?)',(sid,q['node_id'],'Klärung: '+q['question'][:145],actor,now()));c.execute('INSERT INTO question_explorations VALUES(?,?)',(sid,qid));log(c,actor,'Frage mit KI untersuchen',qid,None,{'session_id':sid})
+  return {'id':sid}
  @app.post('/api/work-questions/{qid}')
  async def question_change(qid:str,req:Request):
   actor=user(req);p=await req.json();reason=str(p.get('reason','')).strip()
