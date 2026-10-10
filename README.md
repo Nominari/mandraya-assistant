@@ -82,6 +82,12 @@ Menschen wählen einzelne Änderungen aus und bestätigen sie gemeinsam. Ergebni
 
 Mit KI klären öffnet einen fokussierten Gesprächsbereich: Die Frage bleibt oben, der jüngste geladene Gesprächsabschnitt (bis zu 60 Nachrichten) bleibt chronologisch sichtbar und die Eingabe steht darunter. Ältere Nachrichten bleiben über den Verlauf erreichbar. Der Projektkontext wird bei Bedarf eingeblendet. Neue Nachrichten werden angehängt; nach einer Antwort wird nur der Gesprächsinhalt aktualisiert, ohne Navigation oder Zurückspringen der Seite. Wer während einer Antwort nach oben scrollt, wird nicht automatisch zurück zum Ende gezogen. Ergebnisse können im Gespräch als bestätigbare Entwürfe vorbereitet werden.
 
+## Knappe Antworten und Eingabe
+
+Der Chat leert die Eingabe, sobald der Server die Nachricht angenommen hat. Scheitert die Annahme, bleibt der Entwurf erhalten; eine unterbrochene Antwort setzt angenommenen Text nicht wieder in die Eingabe. Der Sendestatus wird unabhängig vom Antwortabschluss geprüft. Eingabe-Regressionstest: `node app/tests/chat_input.cjs` aus dem Repository-Verzeichnis.
+
+Normale Antworten sind standardmäßig knapp (möglichst unter 120 Wörtern), Zwischenstände bis zu 90 Wörter plus einem konkreten nächsten Schritt. Vollständige Arbeitsfassungen und ausdrücklich gewünschte Detailanalysen sind ausgenommen. Diese Vorgaben gelten für neu erzeugte Inhalte; archivierte Texte bleiben erhalten.
+
 ## Lizenz
 
 MIT, siehe LICENSE. Die Lizenz gilt für den Anwendungscode. Sie räumt keine Rechte an externen Quellen oder der Marke Mandraya ein.
