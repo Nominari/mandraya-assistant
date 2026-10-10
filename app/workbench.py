@@ -5,6 +5,7 @@ from fastapi import HTTPException,Request
 def setup(db):
  with db() as c:
   c.executescript('''
+CREATE TABLE IF NOT EXISTS source_foundations(node_id TEXT PRIMARY KEY,content TEXT,evidence TEXT,at TEXT);
 CREATE TABLE IF NOT EXISTS explorations(id TEXT PRIMARY KEY,node_id TEXT REFERENCES nodes(id),title TEXT,summary TEXT DEFAULT '',basis TEXT DEFAULT '',version INTEGER DEFAULT 1,actor TEXT,at TEXT);
 CREATE TABLE IF NOT EXISTS work_reviews(id TEXT PRIMARY KEY,session_id TEXT,node_id TEXT,content TEXT,basis TEXT,evidence TEXT,at TEXT,applied INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS node_briefs(node_id TEXT PRIMARY KEY,content TEXT,basis TEXT,evidence TEXT,at TEXT);
@@ -19,6 +20,7 @@ def basis(c):
  for name,query in {
   'nodes':'SELECT id,version FROM nodes ORDER BY id',
   'sources':'SELECT s.id,s.title,s.path,s.coverage,max(v.id) FROM sources s LEFT JOIN source_versions v ON v.source_id=s.id GROUP BY s.id ORDER BY s.id',
+  'source_policy':'SELECT source_id,status,edition,successor_id FROM source_policy ORDER BY source_id',
   'edges':'SELECT * FROM edges ORDER BY a,b',
   'statements':'SELECT id,version FROM statements ORDER BY id',
   'questions':'SELECT id,version FROM work_questions ORDER BY id',
@@ -57,6 +59,7 @@ def install(app,db,user,node_detail,now,log):
  def detail(nid:str,req:Request):
   user(req);n=node_detail(nid)
   with db() as c:
+   f=c.execute('SELECT * FROM source_foundations WHERE node_id=?',(nid,)).fetchone();n['foundation']=dict(f) if f else None
    n['sessions']=[dict(r) for r in c.execute('SELECT * FROM explorations WHERE node_id=? ORDER BY at DESC',(nid,))]
    n['statements']=[dict(r) for r in c.execute('SELECT * FROM statements WHERE node_id=? ORDER BY at',(nid,))]
    n['questions']=[dict(r) for r in c.execute('SELECT * FROM work_questions WHERE node_id=? ORDER BY at',(nid,))]

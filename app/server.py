@@ -118,6 +118,9 @@ def node_detail(nid):
   n['sources']=[dict(x) for x in c.execute('SELECT s.*,v.id version_id,v.content,v.at FROM sources s JOIN source_nodes sn ON sn.source_id=s.id LEFT JOIN source_versions v ON v.id=(SELECT max(id) FROM source_versions WHERE source_id=s.id) WHERE sn.node_id=?',(nid,))]
   n['revisions']=[dict(x) for x in c.execute('SELECT id,version,actor,reason,at FROM revisions WHERE node_id=? ORDER BY id DESC',(nid,))]
   n['proposals']=[dict(x) for x in c.execute('SELECT * FROM proposals WHERE node_id=? ORDER BY at DESC',(nid,))]
+  with db() as c:
+   for source in n['sources']:
+    policy=c.execute('SELECT * FROM source_policy WHERE source_id=?',(source['id'],)).fetchone();source['policy']=dict(policy) if policy else {'status':'Aktuell'}
   return n
 @app.get('/api/graph')
 def get_graph(req:Request): user(req);return graph()
@@ -166,6 +169,7 @@ def source(sid:str,req:Request):
  with db() as c:
   s=row(c.execute('SELECT * FROM sources WHERE id=?',(sid,)).fetchone())
   if not s: raise HTTPException(404,'Quelle nicht gefunden.')
+  policy=c.execute('SELECT * FROM source_policy WHERE source_id=?',(sid,)).fetchone();s['policy']=dict(policy) if policy else {'status':'Aktuell'}
   s['versions']=[dict(x) for x in c.execute('SELECT * FROM source_versions WHERE source_id=? ORDER BY id DESC',(sid,))]
  return s
 @app.get('/api/audit')
@@ -181,6 +185,7 @@ def ingest(s,actor):
   cursor=c.execute('INSERT OR IGNORE INTO source_versions(source_id,hash,content,modified,at) VALUES(?,?,?,?,?)',(sid,digest,content,s.get('modified',''),now()))
   for nid in s.get('nodes',[]): c.execute('INSERT OR IGNORE INTO source_nodes VALUES(?,?)',(sid,nid))
   if cursor.rowcount:log(c,actor,'Quelle erfasst',sid,old,{'title':s['title'],'hash':digest,'coverage':s.get('coverage')})
+ with db() as c:source_policy.refresh(c)
  return {'id':sid,'new_version':bool(cursor.rowcount)}
 @app.post('/api/input')
 async def input_text(req:Request):
@@ -258,8 +263,8 @@ async def mcp(req:Request):
   elif method=='tools/list':r={'tools':TOOLS}
   elif method=='tools/call':
    params=p['params'];name=params['name'];args=params.get('arguments',{})
-   if name=='project_overview':value=graph()
-   elif name=='node_context':value=node_detail(args['node_id'])
+   if name=='project_overview':value=chat_read_tool('project_overview',{}, {})
+   elif name=='node_context':value=chat_read_tool('node_context',args,{})
    elif name=='propose_concept':value=proposal(args,'KI via MCP')
    else:raise ValueError('Unknown tool')
    r={'content':[{'type':'text','text':json.dumps(value,ensure_ascii=False)}],'isError':False}
@@ -270,6 +275,11 @@ async def mcp(req:Request):
 def mcp_get():return Response(status_code=405)
 from workbench import setup as setup_workbench, install as install_workbench
 setup_workbench(db)
+import source_policy
+with db() as c:source_policy.refresh(c)
+from chat_records import setup as setup_chat_records, install as install_chat_records
+with db() as c:setup_chat_records(c)
+install_chat_records(app,db,user,now,log)
 install_workbench(app,db,user,node_detail,now,log)
 from chat import install as install_chat
 chat_read_tool=install_chat(app,db,user,graph,node_detail,proposal,now,log)
