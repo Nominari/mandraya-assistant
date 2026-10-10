@@ -268,6 +268,9 @@ async def mcp(req:Request):
  except (KeyError,ValueError,HTTPException) as e:return JSONResponse({'jsonrpc':'2.0','id':mid,'error':{'code':-32602,'message':str(e)}})
 @app.get('/mcp')
 def mcp_get():return Response(status_code=405)
+from workbench import setup as setup_workbench, install as install_workbench
+setup_workbench(db)
+install_workbench(app,db,user,node_detail,now,log)
 from chat import install as install_chat
 chat_read_tool=install_chat(app,db,user,graph,node_detail,proposal,now,log)
 app.mount('/static',StaticFiles(directory=Path(__file__).parent/'static'),name='static')

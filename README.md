@@ -4,15 +4,20 @@ Gemeinsame Konzeptwerkstatt für ein Fantasy-Erlebnisformat für Menschen und Hu
 
 ## Aktueller Umfang
 
+- Drei verbundene Ansichten: Node-Projektübersicht, Themenstand und großzügige Werkstatt
+- Freie Diskussionen ohne verpflichtendes Arbeitsziel; letzter Austausch im Arbeitsbereich, Verlauf in eigener Ansicht
 - Mandraya-Grundgerüst und Kampagnen mit Beziehungen
 - Texteingang und Dateiarchiv für Uploads; Textextraktion aus TXT, Markdown, CSV, DOCX und PDF
 - Quellenversionen, Fassungsvergleich und Änderungsprotokoll
-- Beschlüsse sperren und ausdrücklich wieder öffnen
+- Einzelne präzise Aussagen beschließen und ausdrücklich wieder öffnen; ältere gesperrte Gesamtfassungen bleiben erhalten
+- KI-Überblick auf Anfrage, bei Projektänderungen als veraltet markiert
+- Bearbeitbare KI-Zwischenstände: Menschen wählen Arbeitsfassung, Varianten, Aussagen und konkrete offene Fragen
+- Fragen mit Ursprung, betroffenem Thema und Diskussion; projektweit sichtbar und zurückstellbar
 - Vorschläge annehmen oder ablehnen; Prüfung der zugrunde liegenden Konzeptversion
 - Google-Anmeldung mit expliziter E-Mail-Freigabeliste
 - Minimaler MCP-Endpunkt: Projektübersicht lesen, Knoten lesen, Vorschlag erstellen
 
-KI-Chat nutzt eine eigene, ausdrücklich freigegebene ChatGPT-Verbindung pro Person. Antworten und Quellenbelege werden gemeinsam gespeichert; die KI besitzt nur lesende Projektwerkzeuge. Antworten können Menschen als Vorschlag übernehmen. Konzept- und Quellenfassungen werden vor Übernahme und Freigabe geprüft. Abgebrochene Antworten sind nicht übernehmbar. **Noch keine automatische Drive-Synchronisation.** Das Repository enthält ausschließlich Anwendungscode und das vorläufige Struktur-Gerüst; keine privaten Quellen, Entscheidungen oder Zugangsdaten. Der MCP-Endpunkt verwendet einen separat konfigurierten Bearer-Token und bietet noch keine OAuth-Discovery.
+KI-Chat nutzt eine eigene, ausdrücklich freigegebene ChatGPT-Verbindung pro Person. Antworten und Quellenbelege werden gemeinsam gespeichert; die KI besitzt nur lesende Projektwerkzeuge. In der Werkstatt werden Antworten durch einen gesonderten, bearbeitbaren Zwischenstand ausgewertet. Menschen übernehmen nur ausdrücklich ausgewählte Ergebnisse. Alle Auswahlfelder starten unmarkiert. Gesprächsstand und Ansatz zum Fortsetzen können unabhängig von Konzeptänderungen gespeichert werden. Konzept- und Quellenfassungen werden vor Übernahme und Freigabe geprüft. Abgebrochene Antworten sind nicht übernehmbar. **Noch keine automatische Drive-Synchronisation.** Das Repository enthält ausschließlich Anwendungscode und das vorläufige Struktur-Gerüst; keine privaten Quellen, Entscheidungen oder Zugangsdaten. Der MCP-Endpunkt verwendet einen separat konfigurierten Bearer-Token und bietet noch keine OAuth-Discovery.
 
 ## Start mit Docker
 
@@ -44,6 +49,10 @@ Mit Python 3.12: `python -m pip install -r app/requirements.txt`, danach `cd app
 ## Sicherung
 
 `docker compose exec assistant python backup.py` erzeugt eine SQLite-Sicherung und ein Archiv der hochgeladenen Dateien im Datenvolume unter `backups/`. Regelmäßige und externe Sicherungen müssen zusätzlich eingerichtet werden. ChatGPT-Zugangsdaten und Verschlüsselungsschlüssel sind nicht im regulären Backup enthalten; nach Verlust der Zugangsdaten die Konten erneut verbinden. Chatverläufe liegen in SQLite und sind enthalten.
+
+## Workflow und Grenzen
+
+Die Oberfläche zeigt gespeicherte Quellen und Aussagen, keine zugesicherte Vollständigkeit. KI-Ergebnisse sind Entwürfe. Neue Fragen aus KI-Analysen entstehen erst nach menschlicher Bestätigung. Die projektweite Fragenübersicht wird im sichtbaren Browser alle 30 Sekunden aktualisiert; es gibt keine permanente Hintergrundanalyse. Der letzte Austausch steht im Arbeitsbereich. Der bisherige Verlauf lädt zunächst die jüngsten 60 gespeicherten Nachrichten je Diskussion; ältere Nachrichten lassen sich schrittweise nachladen. Der KI-Kontext ist begrenzt und berücksichtigt den geprüften Zwischenstand; eine vollständige Analyse aller früheren Dialoge wird nicht zugesichert. Unfertige Eingaben und bearbeitete Übernahmeformulare werden personenbezogen im Browser zwischengespeichert; erst bestätigte Übernahmen werden gemeinsam gespeichert und protokolliert. Bei Datenbankänderungen sichert `backup.py` die bisherige Datenbank. Nach Schemaerweiterungen erfordert ein Rollback auf ältere Software gegebenenfalls Wiederherstellung dieser Sicherung.
 
 ## Quellenimport
 

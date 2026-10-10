@@ -27,7 +27,7 @@ class Chat(unittest.TestCase):
   n=server.node_detail('format')
   with server.db() as c:
    vid=c.execute("SELECT max(id) FROM source_versions WHERE source_id='chat-version'").fetchone()[0]
-   c.execute('INSERT OR REPLACE INTO chat_messages VALUES(?,?,?,?,?,?,?,?,?,?)',('test-answer','format','assistant','Arbeitsfassung','KI',server.now(),n['version'],json.dumps([{'source_id':'chat-version','version_id':vid,'title':'Quelle'}]),'test','completed'))
+   c.execute('INSERT OR REPLACE INTO chat_messages(id,node_id,role,content,actor,at,base_version,evidence,model,status) VALUES(?,?,?,?,?,?,?,?,?,?)',('test-answer','format','assistant','Arbeitsfassung','KI',server.now(),n['version'],json.dumps([{'source_id':'chat-version','version_id':vid,'title':'Quelle'}]),'test','completed'))
   r=self.client.post('/api/chat/proposal/test-answer',json={});self.assertEqual(r.status_code,200)
   pid=r.json()['id'];self.assertEqual(self.client.post('/api/chat/proposal/test-answer',json={}).status_code,409)
   server.ingest({'id':'chat-version','title':'Quelle','content':'B'},'Test')
@@ -81,4 +81,30 @@ class Chat(unittest.TestCase):
   self.assertEqual(json.loads(r.text.splitlines()[-1])['type'],'error')
   last=self.client.get('/api/chat/world').json()[-1];self.assertEqual(last['status'],'incomplete')
   self.assertEqual(self.client.post('/api/chat/proposal/'+last['id'],json={}).status_code,404)
+ def test_ai_review_is_draft_until_explicit_apply(self):
+  sid=self.client.post('/api/explorations',json={'node_id':'world'}).json()['id']
+  before=server.node_detail('world')['content']
+  payload={'summary':'Idee untersucht','draft':'Vorgeschlagene Fassung','next_steps':'Weiterdenken','variants':[],'statements':[],'questions':[]}
+  class Response:
+   status_code=200
+   def json(self):return {'models':[{'slug':'test-model','visibility':'list'}]}
+  class Stream:
+   status_code=200
+   async def __aenter__(self):return self
+   async def __aexit__(self,*args):pass
+   async def aiter_lines(self):
+    yield 'data: '+json.dumps({'type':'response.output_item.done','output_index':0,'item':{'type':'message','role':'assistant','content':[{'type':'output_text','text':json.dumps(payload)}]}})
+    yield 'data: '+json.dumps({'type':'response.completed','response':{'output':[]}})
+  class Client:
+   async def __aenter__(self):return self
+   async def __aexit__(self,*args):pass
+   async def get(self,*args,**kwargs):return Response()
+   def stream(self,*args,**kwargs):return Stream()
+  async def token(owner):return 'test-access'
+  with patch.object(auth,'token',token),patch.object(auth.httpx,'AsyncClient',return_value=Client()):
+   r=self.client.post('/api/chat/world',json={'message':'Zwischenstand','model':'test-model','session_id':sid,'mode':'review'})
+  events=[json.loads(x) for x in r.text.splitlines()];self.assertTrue(events[-1]['review_id'])
+  self.assertEqual(server.node_detail('world')['content'],before)
+  review=self.client.get('/api/explorations/'+sid).json()['review'];self.assertFalse(review['applied']);self.assertEqual(review['content']['draft'],'Vorgeschlagene Fassung')
+  self.assertTrue(any('session_version' in e for e in json.loads(review['evidence'])))
 if __name__=='__main__':unittest.main()
