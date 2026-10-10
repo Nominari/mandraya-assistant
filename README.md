@@ -72,6 +72,12 @@ Die KI kann nur lesende Werkzeuge verwenden. Ein Hinweis auf ein anderes Thema b
 
 Diese Prüfung untersucht konkrete Anlässe und Abhängigkeiten mit begrenzter Recherche. Sie garantiert keine vollständige Widerspruchsfreiheit. Änderungen in Drive zählen erst nach dem Import; diese Funktion fügt keinen Drive-Watcher hinzu. Die Prüfungen verbrauchen Kontonutzung und übermitteln relevante Projekttexte an OpenAI. Vor einem Release mit Datenbankmigration `backup.py` aus der bisherigen Version ausführen.
 
+## Abgleich bestehender Fragen und Arbeitsfassungen
+
+Nach Änderungen prüft die KI auch bestehende offene Fragen und ungeschützte Arbeitsfassungen gegen den aktuellen Stand und maßgebliche Beschlüsse. Sie bereitet einen gemeinsamen Abgleich mit Begründung, Belegen und Vorher-/Nachher-Inhalten vor. Teilweise beantwortete Fragen werden präzisiert und bleiben offen; obsolet gewordene Fragen können archiviert werden. Die ursprünglichen Einträge und ihre Historie bleiben erhalten.
+
+Menschen wählen einzelne Änderungen aus und bestätigen sie gemeinsam. Ergebnisse sind vorausgefüllt und bearbeitbar; ein zusätzlicher Kommentar ist optional. Die Übernahme ist atomar: geänderte Grundlagen, Zielversionen oder gesperrte Fassungen blockieren die gesamte Auswahl. Nicht ausgewählte Änderungen bleiben zur Prüfung offen. Die KI verändert keine Beschlüsse automatisch.
+
 ## Lizenz
 
 MIT, siehe LICENSE. Die Lizenz gilt für den Anwendungscode. Sie räumt keine Rechte an externen Quellen oder der Marke Mandraya ein.

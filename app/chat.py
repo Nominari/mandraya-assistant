@@ -183,7 +183,7 @@ CREATE TABLE IF NOT EXISTS chat_proposals(message_id TEXT PRIMARY KEY,proposal_i
       with db() as c:
        if context_basis!=basis(c):raise ValueError('Der Projektstand wurde während der Antwort geändert. Bitte mit der aktuellen Grundlage erneut fragen; diese Antwort ist nicht übernehmbar.')
       final=None;streamed_items={};turn_text=''
-      async with client.stream('POST',auth.RESOURCE+'/responses',headers={'Authorization':'Bearer '+t},json={'model':model,'instructions':INSTRUCTIONS,'input':messages,'tools':tools(bool(sid and mode=='chat'),bool(linked_question and linked_question['status']!='Geklärt' and mode=='chat')),'store':False,'stream':True}) as response:
+      async with client.stream('POST',auth.RESOURCE+'/responses',headers={'Authorization':'Bearer '+t},json={'model':model,'instructions':INSTRUCTIONS,'input':messages,'tools':tools(bool(sid and mode=='chat'),bool(linked_question and linked_question['status'] not in ('Geklärt','Archiviert') and mode=='chat')),'store':False,'stream':True}) as response:
        if response.status_code!=200:
         failure={401:'ChatGPT-Verbindung ist abgelaufen. Bitte erneut verbinden.',403:'Dein Konto hat diesen Zugriff nicht freigegeben.',429:'Dein ChatGPT-Nutzungslimit ist erreicht. Bitte die Nutzungseinstellungen prüfen.'}.get(response.status_code,'OpenAI hat die Anfrage nicht angenommen. Bitte später erneut versuchen.')
         raise ValueError(failure)

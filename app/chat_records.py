@@ -21,7 +21,7 @@ def prepare(c,args,mid,sid,origin,snapshot,evidence,actor,now,log):
  if kind=='variant' and (not title or len(title)>160):raise ValueError('Variantenname erforderlich')
  if kind=='question':
   normalize=lambda text:' '.join(text.casefold().split())
-  for q in c.execute("SELECT id,question FROM work_questions WHERE status!='Geklärt'"):
+  for q in c.execute("SELECT id,question FROM work_questions WHERE status NOT IN ('Geklärt','Archiviert')"):
    if normalize(q['question'])==normalize(content):return {'existing_question_id':q['id'],'status':'Diese offene Frage ist bereits festgehalten; keine Dublette vorbereitet.','saved_as_decision':False}
   for r in c.execute("SELECT id,content FROM chat_records WHERE kind='question' AND status='Entwurf' AND basis=?",(snapshot,)):
    if normalize(r['content'])==normalize(content):return {'existing_draft_id':r['id'],'status':'Dieser Fragenentwurf liegt bereits zur Prüfung vor.','saved_as_decision':False}
@@ -32,7 +32,7 @@ def prepare(c,args,mid,sid,origin,snapshot,evidence,actor,now,log):
 
 def prepare_resolution(c,args,mid,sid,origin,snapshot,evidence,actor,now,log):
  q=c.execute('SELECT q.* FROM work_questions q JOIN question_explorations x ON x.question_id=q.id WHERE x.session_id=? AND q.id=?',(sid,args['question_id'])).fetchone()
- if not q or q['status']=='Geklärt':raise ValueError('Nur die offene Frage dieser Werkstatt kann hier geklärt werden.')
+ if not q or q['status'] in ('Geklärt','Archiviert'):raise ValueError('Nur die offene Frage dieser Werkstatt kann hier geklärt werden.')
  answer=args['answer'].strip();decision=args['decision'].strip();reason=args['reason'].strip()
  if not answer or len(answer)>12000 or len(decision)>6000 or not reason or len(reason)>6000:raise ValueError('Ungültiges Ergebnis')
  rid=secrets.token_hex(12)
@@ -61,7 +61,7 @@ def install(app,db,user,now,log):
    entity=secrets.token_hex(12)
    if r['kind']=='resolution':
     q=c.execute('SELECT * FROM work_questions WHERE id=?',(r['question_id'],)).fetchone()
-    if not q or q['status']=='Geklärt' or q['version']!=r['question_version']:raise HTTPException(409,'Die Frage wurde geändert. Bitte das Ergebnis neu prüfen lassen.')
+    if not q or q['status'] in ('Geklärt','Archiviert') or q['version']!=r['question_version']:raise HTTPException(409,'Die Frage wurde geändert. Bitte das Ergebnis neu prüfen lassen.')
     if nid!=q['node_id'] or len(content)>12000:raise HTTPException(400,'Das Ergebnis muss bei der ursprünglichen Frage bleiben (maximal 12.000 Zeichen).')
     if p.get('decide',False) is not False and p.get('decide') is not True:raise HTTPException(400,'Beschluss ausdrücklich auswählen.')
     statement_id=None
@@ -81,7 +81,7 @@ def install(app,db,user,now,log):
     else:c.execute('INSERT INTO statements(id,node_id,content,status,actor,at) VALUES(?,?,?,?,?,?)',(entity,nid,content,'Beschlossen',actor,now()))
    elif r['kind']=='question':
     if len(content)>6000:raise HTTPException(400,'Frage ist zu lang.')
-    existing=c.execute("SELECT id FROM work_questions WHERE node_id=? AND question=? AND status!='Geklärt'",(nid,content)).fetchone()
+    existing=c.execute("SELECT id FROM work_questions WHERE node_id=? AND question=? AND status NOT IN ('Geklärt','Archiviert')",(nid,content)).fetchone()
     if existing:entity=existing['id']
     else:c.execute('INSERT INTO work_questions(id,node_id,origin_node,session_id,question,reason,status,actor,at) VALUES(?,?,?,?,?,?,?,?,?)',(entity,nid,r['origin_node'],r['session_id'],content,reason,'Offen',actor,now()))
    elif r['kind']=='variant':

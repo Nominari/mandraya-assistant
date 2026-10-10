@@ -108,7 +108,7 @@ def install(app,db,user,node_detail,now,log):
   with db() as c:
    c.execute('BEGIN IMMEDIATE')
    if sid and session(c,sid)['node_id']!=origin:raise HTTPException(400,'Diskussion gehört zu einem anderen Ursprungsthema.')
-   existing=c.execute("SELECT id FROM work_questions WHERE node_id=? AND question=? AND status!='Geklärt'",(nid,question)).fetchone()
+   existing=c.execute("SELECT id FROM work_questions WHERE node_id=? AND question=? AND status NOT IN ('Geklärt','Archiviert')",(nid,question)).fetchone()
    if existing:return {'id':existing['id'],'existing':True}
    qid=secrets.token_hex(12);c.execute('INSERT INTO work_questions(id,node_id,origin_node,session_id,question,reason,status,actor,at) VALUES(?,?,?,?,?,?,?,?,?)',(qid,nid,origin,sid,question,reason,'Offen',actor,now()));log(c,actor,'Offene Frage festgehalten',qid,None,p)
   return {'id':qid}
@@ -128,7 +128,7 @@ def install(app,db,user,node_detail,now,log):
   with db() as c:
    c.execute('BEGIN IMMEDIATE');q=c.execute('SELECT * FROM work_questions WHERE id=?',(qid,)).fetchone()
    if not q:raise HTTPException(404,'Frage nicht gefunden.')
-   if q['status']=='Geklärt':raise HTTPException(409,'Die Frage ist bereits geklärt. Zum Weiterbearbeiten zuerst wieder öffnen.')
+   if q['status'] in ('Geklärt','Archiviert'):raise HTTPException(409,'Die Frage ist bereits geklärt oder archiviert. Zum Weiterbearbeiten zuerst wieder öffnen.')
    old=c.execute('SELECT session_id FROM question_explorations WHERE question_id=? ORDER BY rowid DESC LIMIT 1',(qid,)).fetchone()
    if old:return {'id':old[0]}
    sid=secrets.token_hex(12);c.execute('INSERT INTO explorations(id,node_id,title,actor,at) VALUES(?,?,?,?,?)',(sid,q['node_id'],'Klärung: '+q['question'][:145],actor,now()));c.execute('INSERT INTO question_explorations VALUES(?,?)',(sid,qid));log(c,actor,'Frage mit KI untersuchen',qid,None,{'session_id':sid})
@@ -188,7 +188,7 @@ def install(app,db,user,node_detail,now,log):
     if c.execute("SELECT 1 FROM statements WHERE node_id=? AND content=? AND status='Beschlossen'",(n['id'],content)).fetchone():continue
     did=secrets.token_hex(12);c.execute('INSERT INTO statements(id,node_id,content,status,actor,at) VALUES(?,?,?,?,?,?)',(did,n['id'],content,'Beschlossen',actor,now()));log(c,actor,'Aussage beschlossen',did,None,{'content':content,'node_id':n['id'],'reason':reason})
    for x in chosen['questions']:
-    existing=c.execute("SELECT id FROM work_questions WHERE node_id=? AND question=? AND status!='Geklärt'",(x['node_id'],x['question'])).fetchone()
+    existing=c.execute("SELECT id FROM work_questions WHERE node_id=? AND question=? AND status NOT IN ('Geklärt','Archiviert')",(x['node_id'],x['question'])).fetchone()
     if existing:continue
     qid=secrets.token_hex(12);c.execute('INSERT INTO work_questions(id,node_id,origin_node,session_id,question,reason,status,actor,at) VALUES(?,?,?,?,?,?,?,?,?)',(qid,x['node_id'],n['id'],r['session_id'],x['question'],x['reason'],'Offen',actor,now()));log(c,actor,'Offene Frage festgehalten',qid,None,x)
    for x in chosen['variants']:
