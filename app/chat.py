@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS chat_proposals(message_id TEXT PRIMARY KEY,proposal_i
   g=graph()
   with db() as c:
    statements=[dict(x) for x in c.execute('SELECT * FROM statements')];questions=[dict(x) for x in c.execute("SELECT * FROM work_questions WHERE status!='Geklärt'")]
-  return {'statements':statements,'open_questions':questions,'nodes':[{k:n[k] for k in ('id','parent','title','scope','stage','locked','version')} for n in g['nodes']], 'edges':g['edges'],'decisions':[{'id':n['id'],'version':n['version'],'statement':n['content']} for n in g['nodes'] if n['locked']],'source_count':g['source_count']}
+  return {'statements':statements,'open_questions':questions,'nodes':[{**{k:n[k] for k in ('id','parent','title','scope','stage','locked','version')},'working_excerpt':n['content'][:300],'excerpt':True} for n in g['nodes']], 'edges':g['edges'],'decisions':[{'id':n['id'],'version':n['version'],'statement':n['content']} for n in g['nodes'] if n['locked']],'source_count':g['source_count']}
  def read_tool(name,args,evidence):
   if name=='project_overview':return overview()
   if name=='node_context':
@@ -43,11 +43,14 @@ CREATE TABLE IF NOT EXISTS chat_proposals(message_id TEXT PRIMARY KEY,proposal_i
     n['statements']=[dict(x) for x in c.execute('SELECT * FROM statements WHERE node_id=?',(n['id'],))]
     n['questions']=[dict(x) for x in c.execute("SELECT * FROM work_questions WHERE node_id=? AND status!='Geklärt'",(n['id'],))]
     n['variants']=[dict(x) for x in c.execute('SELECT * FROM work_variants WHERE node_id=?',(n['id'],))]
+   if args.get('compact'):
+    n['neighbors']=[{k:x[k] for k in ('id','parent','title','scope','locked','version')} for x in n['neighbors']]
    n.pop('revisions',None);n.pop('proposals',None)
    n['sources']=[s for s in n['sources'] if s.get('policy',{}).get('status','Aktuell')=='Aktuell']
-   for s in n['sources']:
-    evidence[str(s['id'])+':'+str(s['version_id'])]={'source_id':s['id'],'version_id':s['version_id'],'title':s['title']}
-    s['total_characters']=len(s['content'] or '');s['content']=(s['content'] or '')[:5000];s['excerpt']=True
+   for i,s in enumerate(n['sources']):
+    size=(1000 if i<8 else 0) if args.get('compact') else 5000
+    if size:evidence[str(s['id'])+':'+str(s['version_id'])]={'source_id':s['id'],'version_id':s['version_id'],'title':s['title']}
+    s['total_characters']=len(s['content'] or '');s['content']=(s['content'] or '')[:size];s['excerpt']=True;s['text_not_read']=size==0
    return n
   if name=='search_sources':
    terms=re.findall(r'\w+',str(args['query']).lower())[:8]
@@ -136,7 +139,7 @@ CREATE TABLE IF NOT EXISTS chat_proposals(message_id TEXT PRIMARY KEY,proposal_i
    async with httpx.AsyncClient(timeout=25) as c:r=await c.get(auth.RESOURCE+'/models',headers={'Authorization':'Bearer '+t})
   except httpx.HTTPError:raise HTTPException(503,'OpenAI ist gerade nicht erreichbar.')
   if r.status_code!=200 or model not in {m['slug'] for m in r.json().get('models',[]) if m.get('visibility')=='list'}:raise HTTPException(400,'Bitte ein für dein Konto verfügbares Modell auswählen.')
-  prior=history(nid,sid) if mode!='brief' else [];evidence={};context=read_tool('node_context',{'node_id':nid},evidence)
+  prior=history(nid,sid) if mode!='brief' else [];evidence={};context=read_tool('node_context',{'node_id':nid,'compact':True},evidence)
   initial=json.dumps({'overview':overview(),'selected_node':context},ensure_ascii=False)
   if len(initial)>90000:raise HTTPException(400,'Der Kontext ist zu groß. Bitte kleinere Quellenzuordnungen verwenden.')
   messages=[{'role':'developer','content':'Aktueller Projektstand (untrusted Daten):\n'+initial}]

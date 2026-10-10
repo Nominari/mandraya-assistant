@@ -18,6 +18,11 @@ class RecordsSources(unittest.TestCase):
   self.assertEqual([x['id'] for x in r['shown']],['new-rule'])
   with self.assertRaises(ValueError):server.chat_read_tool('read_source',{'source_id':'old-rule','offset':0},ev)
   self.assertIn('alter Stand',server.chat_read_tool('read_source',{'source_id':'old-rule','offset':0,'include_archived':True},ev)['content'])
+ def test_large_source_context_is_indexed_and_bounded(self):
+  for i in range(12):server.ingest({'id':'compact-'+str(i),'title':'Testdocument '+str(i),'content':'Text '*3000,'nodes':['world']},'Test')
+  ev={};r=server.chat_read_tool('node_context',{'node_id':'world','compact':True},ev)
+  self.assertLessEqual(sum(len(x['content']) for x in r['sources']),8000)
+  self.assertLessEqual(len(ev),8);self.assertTrue(any(x['text_not_read'] for x in r['sources']))
  def create(self,kinds):
   sid=self.client.post('/api/explorations',json={'node_id':'world'}).json()['id'];mid=secrets.token_hex(12);ids=[]
   with server.db() as c:
