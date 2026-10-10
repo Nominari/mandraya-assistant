@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS chat_proposals(message_id TEXT PRIMARY KEY,proposal_i
    try:
     async with httpx.AsyncClient(timeout=httpx.Timeout(180,connect=20)) as client:
      for turn in range(6):
-      final=None
+      final=None;streamed_items={};turn_text=''
       async with client.stream('POST',auth.RESOURCE+'/responses',headers={'Authorization':'Bearer '+t},json={'model':model,'instructions':INSTRUCTIONS,'input':messages,'tools':tools(),'store':False,'stream':True}) as response:
        if response.status_code!=200:
         failure={401:'ChatGPT-Verbindung ist abgelaufen. Bitte erneut verbinden.',403:'Dein Konto hat diesen Zugriff nicht freigegeben.',429:'Dein ChatGPT-Nutzungslimit ist erreicht. Bitte die Nutzungseinstellungen prüfen.'}.get(response.status_code,'OpenAI hat die Anfrage nicht angenommen. Bitte später erneut versuchen.')
@@ -137,12 +137,22 @@ CREATE TABLE IF NOT EXISTS chat_proposals(message_id TEXT PRIMARY KEY,proposal_i
         if data=='[DONE]':continue
         e=json.loads(data);kind=e.get('type')
         if kind=='response.output_text.delta':
-         delta=e.get('delta','');text+=delta;yield event('delta',{'text':delta})
+         delta=e.get('delta','');text+=delta;turn_text+=delta;yield event('delta',{'text':delta})
          if len(text)>100000:raise ValueError('Antwort ist zu lang; bitte die Frage eingrenzen.')
+        if kind=='response.output_item.done':streamed_items[e.get('output_index',len(streamed_items))]=e['item']
         if kind=='response.completed':final=e['response']
         if kind in ('error','response.failed','response.incomplete'):raise ValueError('OpenAI konnte die Antwort nicht abschließen.')
       if not final:raise ValueError('Die Verbindung endete ohne vollständige Antwort.')
-      output=final.get('output',[]);calls=[x for x in output if x.get('type')=='function_call']
+      # Plan streams can omit output from the completion envelope. Completed
+      # output-item events carry the authoritative tool calls and messages.
+      output=final.get('output') or [streamed_items[k] for k in sorted(streamed_items)]
+      answer=''.join(part.get('text','') for item in output if item.get('type')=='message' and item.get('role')=='assistant' for part in item.get('content',[]) if part.get('type')=='output_text')
+      if answer and answer.startswith(turn_text):
+       remainder=answer[len(turn_text):]
+       if remainder:
+        text+=remainder;yield event('delta',{'text':remainder})
+        if len(text)>100000:raise ValueError('Antwort ist zu lang; bitte die Frage eingrenzen.')
+      calls=[x for x in output if x.get('type')=='function_call']
       if not calls:
        completed=True;break
       if len(calls)>12:raise ValueError('Zu viele Quellenabfragen; bitte die Frage eingrenzen.')

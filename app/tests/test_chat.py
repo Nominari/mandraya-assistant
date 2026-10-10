@@ -62,8 +62,8 @@ class Chat(unittest.TestCase):
    async def get(self,*args,**kwargs):return Response()
    def stream(self,*args,**kwargs):
     calls.append(kwargs['json'])
-    if len(calls)==1:return Stream([{'type':'response.completed','response':{'output':[{'type':'function_call','namespace':'mandraya','name':'read_source','arguments':json.dumps({'source_id':'chat-src','offset':0}),'call_id':'c1'}]}}])
-    return Stream([{'type':'response.output_text.delta','delta':'Prüfbare Antwort'}, {'type':'response.completed','response':{'output':[{'type':'message','role':'assistant','content':[{'type':'output_text','text':'Prüfbare Antwort'}]}]}}])
+    if len(calls)==1:return Stream([{'type':'response.output_item.done','output_index':0,'item':{'type':'function_call','namespace':'mandraya','name':'read_source','arguments':json.dumps({'source_id':'chat-src','offset':0}),'call_id':'c1'}},{'type':'response.completed','response':{'output':[]}}])
+    return Stream([{'type':'response.output_text.delta','delta':'Prüfbare '},{'type':'response.output_item.done','output_index':0,'item':{'type':'message','role':'assistant','content':[{'type':'output_text','text':'Prüfbare Antwort'}]}},{'type':'response.completed','response':{'output':[]}}])
   server.ingest({'id':'chat-src','title':'Testquelle','content':'Mondlaterne'},'Test')
   before=server.node_detail('world')['content']
   async def token(owner):return 'test-access'
@@ -71,6 +71,7 @@ class Chat(unittest.TestCase):
    r=self.client.post('/api/chat/world',json={'message':'Prüfe Quellen','model':'test-model'})
   events=[json.loads(x) for x in r.text.splitlines()]
   self.assertEqual(events[-1]['type'],'done');self.assertEqual(len(calls),2)
+  self.assertEqual(''.join(e['text'] for e in events if e['type']=='delta'),'Prüfbare Antwort')
   self.assertFalse(calls[0]['store']);self.assertTrue(any(x.get('type')=='function_call_output' for x in calls[1]['input']))
   self.assertTrue(events[-1]['evidence']);self.assertEqual(server.node_detail('world')['content'],before)
   class Broken(Client):
